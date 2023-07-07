@@ -1,0 +1,211 @@
+---
+title: "1361_Homework_6"
+author: "Lee Jason"
+date: "2023-03-24"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, warning = FALSE}
+library(ISLR2)
+library(leaps)
+library(gam)
+library(GGally)
+library(boot)
+```
+
+## 2. 
+### ISLR Chapter 7 Conceptual Exercise 5 (9 pts)
+
+As $\lambda$ increases, the penalty term increases in magnitude and therefore importance to the minimization function. 
+
+### (a)
+
+The minimum of a function is found through analyzing the critical points of the derivative of the function. Therefore as $\hat{g2}$ will have the higher polynomial derivative (X^3 vs X^2), it is more flexible and should have the better training RSS.
+
+### (b)
+
+It depends on what the original data looks like. From (a) we know that $\hat{g2}$ will be more flexbile than $\hat{g1}$, so it may overfit on a sparse dataset or a dataset with a true linear relationship. On the other hand it may fit better if the true relationship of the dataset is non-linear. 
+
+### (c)
+
+With 0 $\lambda$ both penalty terms are irrelevant in the g functions. Therefore we should expect to see them have the same test and training RSS values when provided the same dataset. 
+
+## 3.
+### ISLR Chapter 7 Applied Exercise 8 (10 pts)
+
+```{r}
+data(Auto)
+#remove the name column
+Auto.df <- Auto[,-ncol(Auto)]
+ggpairs(Auto.df)
+```
+
+It seems like mpg has some non-linear relationships with most of the other predictors. The rest look linear or are too hard to tell.
+
+```{r}
+#GAM
+gam.8 <- gam(mpg ~ year+origin+s(cylinders)+s(displacement)+s(horsepower)+s(weight)+s(acceleration), data=Auto.df)
+summary(gam.8)
+par(mfrow = c(3, 3))
+plot(gam.8, se = T, col = "green")
+```
+
+The GAM shows that most predictors have some non-linear relationship to mpg. All of them except for the qualitative year and origin predictors were significant in the ANOVA for non-parametric effects. Visually they all also contained a polynomial shape.  
+
+### ISLR Chapter 7 Applied Exercise 9 (14 pts)
+```{r}
+data(Boston)
+```
+### (a)
+```{r}
+lm.9 <- lm(nox ~ poly(dis,3,raw=TRUE), data=Boston)
+summary(lm.9)
+lm.pred <- predict(lm.9)
+ix <- sort(Boston$dis, index.return=T)$ix
+plot(Boston$dis, Boston$nox, pch=19)
+lines(Boston$dis[ix], lm.pred[ix], col = 'red', lwd= 3)
+```
+
+### (b)
+```{r}
+par(mfrow = c(2,3))
+my.rss <- vector(mode = "numeric", length = 10)
+for(i in 1:10){
+  lm.my <- lm(nox ~ poly(dis,i,raw=TRUE), data=Boston)
+  lm.pred.temp <- predict(lm.my)
+  ix <- sort(Boston$dis, index.return=T)$ix
+  plot(Boston$dis, Boston$nox, pch=19)
+  lines(Boston$dis[ix], lm.pred.temp[ix], col = 'red', lwd= 3)
+  
+  my.rss[i] <- sum(resid(lm.my)^2)
+}
+
+thing <- data.frame(c(1:10), my.rss)
+colnames(thing) <- c("Poly Degree", "RSS")
+thing
+```
+
+### (c)
+```{r}
+set.seed(42)
+cv.error <- vector(mode="numeric", 10)
+for(i in 1:10){
+    glm.my <- glm(nox ~ poly(dis,i,raw=TRUE), data=Boston)
+    cv.error[i] <- cv.glm(Boston, glm.my, K=10)$delta[1]
+}
+
+plot(1:10, cv.error, pch=19)
+which(cv.error == min(cv.error))
+```
+
+A 10-K Cross Validation test for the different degrees of polynomials showed that polynomial degree of 4 is the optimal degree of the polynomial as it resulted in the lowest MSE.
+
+### (d)
+```{r}
+attr(bs(Boston$dis,df=4),"knots")
+my.fit <- lm(nox~bs(dis, df=4, knots = c(3.20745)), data=Boston)
+summary(my.fit)
+```
+
+The knot was determined using the attr() function using 4 degrees of freedom. The result was a single knot at the median (50%) of 3.20745.
+
+```{r}
+pred2 <- predict(my.fit)
+ix2 <- sort(Boston$dis, index.return=T)$ix
+plot(Boston$dis, Boston$nox, pch=19)
+lines(Boston$dis[ix2], pred2[ix2], col = 'red', lwd= 3)
+abline(v = 3.20745, lty=3, col = "blue")
+```
+
+### (e)
+```{r}
+par(mfrow = c(3,4))
+my.rss2 <- vector(mode="numeric", 12)
+for(i in 4:15){
+  temp.fit <- lm(nox~bs(dis,df=i), data=Boston)
+  temp.pred <- predict(temp.fit)
+  ix3 <- sort(Boston$dis, index.return=T)$ix
+  plot(Boston$dis, Boston$nox, pch=19)
+  lines(Boston$dis[ix3], temp.pred[ix3], col = 'red', lwd= 3)
+  
+  my.rss2[i-3] <- sum(resid(temp.fit)^2)
+}
+
+thing2 <- data.frame(c(4:15), my.rss2)
+colnames(thing2) <- c("DoF", "RSS")
+thing2
+```
+```{r}
+plot(thing2$DoF, thing2$RSS, pch=19)
+which(my.rss2 == min(my.rss2)) +3
+```
+
+Our results show that that the regression spline trained with the 14 DoF had the lowest RSS). In fact, the general trend observed is that the more DoF used in the regression spline, the lower the RSS is. Default knots used.
+
+### (f)
+```{r, warning = FALSE}
+set.seed(1)
+cv.error.12 <- vector(mode="numeric", 12)
+for(i in 4:15){
+    spline.my <- glm(nox~bs(dis,df=i), data=Boston)
+    cv.error.12[i-3] <- cv.glm(Boston, spline.my, K=10)$delta[1]
+}
+
+plot(4:15, cv.error.12, pch=19)
+which(cv.error.12 == min(cv.error.12)) + 3
+```
+
+10-fold Cross Validation resulted in 7 DoF being the best number of DoF as it had the lowest MSE. There doesn't seem to be a discernible pattern as there are a number of spikes then valleys from DoF 7 to 15. Default knots used.
+
+### ISLR Chapter 7 Applied Exercise 10 (10 pts)
+```{r}
+data(College)
+```
+### (a)
+```{r}
+train.sub <- sample(c(1:nrow(College)), nrow(College)*0.75, replace = F)
+train.df <- College[train.sub,]
+test.df <- College[-train.sub,]
+
+regfit.fwd <- regsubsets(Outstate~., data = train.df, nvmax = 17, method = "forward")
+
+coef(regfit.fwd, which.min((summary(regfit.fwd))$bic))
+```
+
+Forward Stepwise Selection resulted in a low BIC with 10 predictors (of 17)
+
+### (b)
+```{r}
+my.gam <- gam(Outstate ~ Private + s(Apps) + s(Accept) + s(Top10perc) + s(F.Undergrad) + s(Room.Board) + s(PhD) + s(perc.alumni) + s(Expend) + s(Grad.Rate), data = train.df)
+
+par(mfrow = c(2,3))
+plot(my.gam, se = TRUE, col = "blue")
+```
+
+We can see that that most of the predictors follow a polynomial relationship (e.g. Top10perc, Apps, etc.) with some having a more linear relationship (e.g. Room.Board, perc.alumni). Expend seems to be the one predictor that has a non-linear relationship.
+
+### (c)
+```{r}
+#GAM
+gam.mse <- mean((predict(my.gam, newdata = test.df) - test.df$Outstate)^2)
+#Linear
+my.lm <- lm(Outstate ~ Private + Apps + Accept + Top10perc + F.Undergrad + Room.Board + PhD + perc.alumni + Expend + Grad.Rate, data = train.df)
+linear.mse <- mean((predict(my.lm, newdata = test.df) - test.df$Outstate)^2)
+paste("GAM:", gam.mse, " / Linear:", linear.mse)
+```
+
+GAM model seems to have done better than a straight linear model on the test set as it has a lower MSE. This suggests that there does exist some significant non-linear relationships in predicting Outstate tuition using the 10 predictors from (a).
+
+### (d)
+```{r}
+summary(my.gam)
+```
+
+Anova for parametric effects shows that all of the predictors are statistically significant assuming only linear relationship. The Anova for nonparametric effects shows that the App, Accept, F.Undergrad, and Expend predictors require non-linear terms as they are below $\alpha <0.05$ level.

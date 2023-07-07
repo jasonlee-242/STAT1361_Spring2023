@@ -1,0 +1,510 @@
+---
+title: "1361_HW7"
+author: "Jason Lee"
+date: "2023-04-03"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, warning=FALSE}
+library(ISLR2)
+library(tree)
+library(randomForest)
+library(BART)
+library(gbm)
+library(pls)
+```
+
+# Question 2
+## 2)
+According to the formula we can see that there will be p trees formed during boosting, so the number of trees will equal the number of predictors. At each iteration, we are computing a tree with one split based on the previous model's residuals that will then have its output added to the previous model's. In this regard it is a additive model given this step by step summation algorithm. 
+
+## 4)
+### (a)
+![4a Tree](/Users/jasonlee/Desktop/Pitt 2022-2024/Spring2023 Materials/STAT1361/HW7/4a.png)
+### (b)
+![4b Graph](/Users/jasonlee/Desktop/Pitt 2022-2024/Spring2023 Materials/STAT1361/HW7/4b.png)
+
+## 5)
+For Majority Vote it would be classified as "Red" since there are more values >= 0.5 which is equivalent to "Red"
+
+For Avg. Probability it would be classified as "Green" since the average of the estimates is 0.45 which is < 0.5.
+
+# Question 3
+## 8)
+### (a)
+```{r}
+data("Carseats")
+set.seed(1)
+q3.8.split <- sample(1:nrow(Carseats),0.7*nrow(Carseats),replace = F)
+q3.8.train <- Carseats[q3.8.split,]
+q3.8.test <- Carseats[-q3.8.split,]
+```
+
+### (b)
+```{r}
+tree.Sales <- tree(Sales ~ ., data=q3.8.train)
+plot(tree.Sales)
+text(tree.Sales,pretty = 0)
+
+test.r <- predict(tree.Sales, q3.8.test)
+paste("MSE:", round(mean((test.r-q3.8.test$Sales)^2), 3))
+```
+
+### (c)
+```{r}
+tree.cv <- cv.tree(tree.Sales)
+plot(tree.cv$size, tree.cv$dev, type = "b")
+which(tree.cv$dev == min(tree.cv$dev))
+```
+
+Pruning the Tree does not improve the test MSE. The minimum deviance according to our cross-validation occurred at 18 terminal nodes which corresponds with a fully grown tree, meaning the pruning of the tree from 18 is not necessary.
+
+```{r}
+prune.Car <- prune.tree(tree.Sales, best = 18)
+
+red.tree <- predict(prune.Car, q3.8.test)
+paste("MSE:", round(mean((red.tree-q3.8.test$Sales)^2), 3))
+```
+
+As we can see, the pruning doesn't impact the test MSE.
+
+### (d)
+```{r}
+set.seed(12)
+bag.car <- randomForest(Sales ~ ., data = q3.8.train, mtry = 10, importance = TRUE)
+bag.car 
+
+bag.pred <- predict(bag.car, q3.8.test)
+paste("Bag MSE:", round(mean((bag.pred-q3.8.test$Sales)^2), 3))
+```
+
+Bagged MSE is about 60% of single tree MSE.
+
+```{r}
+importance(bag.car)
+```
+
+The most important variable is ShelveLoc followed by Price. 
+
+### (e)
+```{r}
+set.seed(9)
+q3.e.rf <- randomForest(Sales ~ ., data=q3.8.train, mtry = round(sqrt(10)), importance = TRUE)
+
+q3.e.pred <- predict(q3.e.rf,q3.8.test)
+paste("RF MSE:", round(mean((q3.e.pred-q3.8.test$Sales)^2),3))
+```
+
+Using the conventional $m = \sqrt(p)$ as mtry, we see that reducing the number of predictors evaluated seems to increase the MSE.
+
+```{r}
+set.seed(9)
+rf.mse <- vector(mode="numeric", length = 10)
+for(i in c(1:10)){
+  rf.temp <- randomForest(Sales ~ ., data=q3.8.train, mtry = i, importance = TRUE)
+
+  pred.temp <- predict(rf.temp,q3.8.test)
+  rf.mse[i] <- round(mean((pred.temp-q3.8.test$Sales)^2),3)
+}
+
+thing <- data.frame(c(1:10), rf.mse)
+thing
+```
+
+It seems like as m increases from 1, the rf.mse decreases, but begins to increase again at a slower rate up till p.
+
+```{r}
+importance(q3.e.rf)
+```
+
+The ShelveLoc and Price variables were still the most important. 
+
+### (f)
+```{r}
+set.seed(19)
+bart <- gbart(q3.8.train[,-1], q3.8.train[,"Sales"], x.test=q3.8.test)
+
+bart.pred <- bart$yhat.test.mean
+paste("BART MSE:", mean((q3.8.test$Sales-bart.pred)^2))
+```
+
+BART seems to have done a lot worse as it's MSE is nearly 10x that of Random Forest.
+
+## 10)
+### (a)
+```{r}
+data("Hitters")
+hitters.df <- Hitters[!is.na(Hitters$Salary),]
+hitters.df$Salary <- log(hitters.df$Salary)
+```
+
+### (b)
+```{r}
+hit.train <- hitters.df[1:200,]
+hit.test <- hitters.df[-c(1:200),]
+```
+
+### (c)
+```{r}
+set.seed(420)
+boost.mse <- vector(mode = "numeric", length = 7)
+for(i in c(1:7)){
+  boost.hit <- gbm(Salary ~ ., data = hit.train, distribution = "gaussian", n.trees = 1000, interaction.depth = i)
+  boost.pred <- predict(boost.hit, hit.train, n.trees = 1000)
+  boost.mse[i] <- mean((boost.pred-hit.train$Salary)^2)
+}
+
+plot(c(1:7), boost.mse, pch=19, xlab="Shrinkage", ylab="Train MSE")
+```
+
+### (d)
+```{r}
+set.seed(420)
+boost.mse2 <- vector(mode = "numeric", length = 5)
+for(i in c(7:12)){
+  boost.hit <- gbm(Salary ~ ., data = hit.train, distribution = "gaussian", n.trees = 1000, interaction.depth = i)
+  boost.pred <- predict(boost.hit, hit.train, n.trees = 1000)
+  boost.mse2[i-6] <- mean((boost.pred-hit.train$Salary)^2)
+}
+plot(c(7:12), boost.mse2, pch=19, xlab="Shrinkage", ylab="Test MSE")
+```
+
+### (e)
+```{r}
+#SLR
+set.seed(420)
+lin.mse <- vector(mode="numeric", length = 7)
+for(i in c(1:7)){
+  linear <- lm(Salary ~ ., data = hit.train)
+  lin.pred <- predict(linear, hit.test)
+  lin.mse[i] <- mean((lin.pred-hit.test$Salary)^2)
+}
+```
+```{r}
+#PLS
+set.seed(420)
+pls.mse <- vector(mode="numeric", length = 7)
+for(i in c(1:7)){
+  pls <- plsr(Salary ~., data=hit.train,scale = TRUE, validation = "CV")
+  pls.pred <- predict(pls, hit.test)
+  pls.mse[i] <- mean((pls.pred-hit.test$Salary)^2)
+}
+```
+```{r}
+thing2 <- data.frame(c(1:7), boost.mse, lin.mse, pls.mse)
+thing2
+```
+
+Boosting is much better than both Linear Regression (Ch3) and PLS (Ch6). 
+
+### (f)
+```{r}
+boost.hit2 <- gbm(Salary~.,data=hit.train,distribution = "gaussian", n.trees=1000, interaction.depth = 3)
+summary(boost.hit2)
+```
+
+The most important predictor by a long shot is CAtBat followed by CRBI and CWalks. These three have the highest relative influence. 
+
+### (g)
+```{r}
+bag.hit <- randomForest(Salary~., data=hit.train, mtry=ncol(hit.train)-1, importance=T)
+bag.hit.pred <- predict(bag.hit, hit.test)
+paste("Hitting Bag MSE:", round(mean((bag.hit.pred-hit.test$Salary)^2),3))
+```
+ 
+ 
+# Question 4
+We might still want to use regression since it is highly likely that most of those predictors are themselves continuous. Fitting a classification model with numerous continuous predictors is very difficult. If we do fit the model with continuous predictors, it can more easily model non-linear decision boundaries for more accurate results. Regression can also handle interactions between predictors much easier. We know that there is likely to be interaction between predictors in real world datasets, so regression can deal with interaction terms much easier. Finally, it is possible for and 0 and 1 response to have some sort of "meaning" where 1 is better/higher and 0 is lower/worse. Regression is able to model this. 
+
+# Question 5
+## (a)
+```{r}
+set.seed(42)
+df.train <- read.csv("HW7train.csv", header=T)
+split.loc <- sample(1:1000, 900, replace=F)
+train <- df.train[split.loc,]
+test <- df.train[-split.loc,]
+```
+
+## (b)
+```{r}
+set.seed(15)
+rf <- randomForest(y~., train, mtry=round(sqrt(ncol(train)-1)), importance=T)
+importance(rf)
+```
+```{r}
+par(mfrow=c(3,1))
+plot(rf$importance[,1],type="b",axes=F,ann=F,ylim=c(0,max(rf$importance[,1])+1))
+axis(1,at=1:10,lab=names(df.train)[-1])
+axis(2,at=seq(0,max(rf$importance)+1,0.25),las=1)
+box()
+```
+
+## (c)
+```{r}
+# READ ME: I FOR THE LIFE OF ME can't get this part to work in a for loop (replacing the ith column with the permuted column). I'm not sure why it just doesn't work in a for loop. Something is breaking that is not allowing for me to subset a dataframe within a for loop. I instead did it 10 individual times and have shown only the first one. The rest are hidden in the knit. 
+set.seed(4)
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+```
+```{r}
+new.pred <- sample(train[,2], 900, replace=F)
+temp <- train
+temp[,2] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[1] <- mean(temp.rf.pred-test$y)^2
+```
+```{r,echo=FALSE}
+set.seed(4)
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,3],900,replace=F)
+temp <- train
+temp[,3] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[2] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,4],900,replace=F)
+temp <- train
+temp[,4] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[3] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,5],900,replace=F)
+temp <- train
+temp[,5] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[4] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,6],900,replace=F)
+temp <- train
+temp[,6] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[5] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,7],900,replace=F)
+temp <- train
+temp[,7] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[6] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,8],900,replace=F)
+temp <- train
+temp[,8] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[7] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,9],900,replace=F)
+temp <- train
+temp[,9] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[8] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,10],900,replace=F)
+temp <- train
+temp[,10] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[9] <- mean(temp.rf.pred-test$y)^2
+
+mse.perm <- vector(mode="numeric",length = ncol(train)-1)
+new.pred <- sample(train[,11],900,replace=F)
+temp <- train
+temp[,11] <- new.pred
+rf.temp <- randomForest(y~.,data=temp,mtry=round(sqrt(ncol(temp)-1)), importance=T)
+temp.rf.pred <- predict(rf.temp, test)
+mse.perm[10] <- mean(temp.rf.pred-test$y)^2
+```
+
+```{r}
+plot(mse.perm,type="b",axes=F,ann=F,ylim=c(0,max(mse.perm)+1))
+axis(1,at=1:10,lab=names(df.train)[-1])
+axis(2,at=seq(0,max(mse.perm)+1,0.25),las=1)
+box()
+```
+
+There seems to be no predictors that stand out in importance relative to the rest as all have about the same MSE.
+
+## (d)
+```{r}
+#Same thing as above
+mse.loo <- vector(mode="numeric",length = ncol(train)-1)
+```
+```{r}
+tempp <- train[,-2]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[1] <- mean(rf.tempp.pred-test$y)^2
+```
+```{r, echo=FALSE}
+tempp <- train[,-3]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[2] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-4]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[3] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-5]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[4] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-6]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[5] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-7]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[6] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-8]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[7] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-9]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[8] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-10]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[9] <- mean(rf.tempp.pred-test$y)^2
+
+tempp <- train[,-11]
+rf.tempp <- randomForest(y~.,data=tempp, mtry=round(sqrt(ncol(train)-1)), importance=T)
+rf.tempp.pred <- predict(rf.tempp, test)
+mse.loo[10] <- mean(rf.tempp.pred-test$y)^2
+```
+```{r}
+plot(mse.loo,type="b",axes=F,ann=F,ylim=c(0,max(mse.loo)+1))
+axis(1,at=1:10,lab=names(df.train)[-1])
+axis(2,at=seq(0,max(mse.loo)+1,0.25),las=1)
+box()
+```
+
+It looks more like part c. There really seems to be no difference in importance for the predictors. I would trust c more. We know that RF seeks to decorrelate the decision trees and prevent super significant predictors from continuously being used as the first few splits (reducing our ability to reduce variance). With (c), we showed that none of the predictors was above the rest in importance, meaning that we successfully decorrelated the decision trees.
+
+## (e)
+```{r}
+pairs(train[,1:5])
+```
+
+Note: In order to save space and reduce computation time I sub-setted the dataset, but the following conclusion still holds. 
+
+A pairs plot shows that there exists a significant positive linear correlation between X1 and X2 which is shown to be the most important predictors in the graph generated in (b). The rest of the predictors show little to no correlation between each other. This positive linear correlation between X1 and X2 is likely what is contributing to their high importance. 
+
+# Question 6
+```{r}
+gen.df <- function(variance, observations = 100, features = 10){
+  obs <- matrix(runif(observations*features), observations, features)
+  err <- rnorm(observations, 0, variance)
+  res <- apply(obs, 1, sum) + err
+  gen.df <- data.frame(obs, res)
+}
+```
+
+## (a)
+```{r}
+set.seed(2)
+q6.train <- gen.df(0.5)
+```
+
+## (b)
+```{r}
+set.seed(3)
+q6.test <- gen.df(0.5, 10000, 10)
+```
+
+## (c)
+```{r}
+#Bagging
+q6.bag <- randomForest(res~., data=q6.train, mtry=ncol(q6.train)-1,importance=T)
+q6.bag.pred <- predict(q6.bag, q6.test)
+paste("Bag MSE:", round((mean(q6.bag.pred-q6.test$res)^2),3))
+```
+```{r}
+#RF
+q6.rf <- randomForest(res~., data=q6.train, mtry=3,importance=T)
+q6.rf.pred <- predict(q6.rf, q6.test)
+paste("RF MSE:", round((mean(q6.rf.pred-q6.test$res)^2),3))
+```
+
+## (d)
+```{r}
+#no seed since it would just generate the same train set over and over
+err.bag <- vector(mode="numeric",length=50)
+err.rf <- vector(mode="numeric", length = 50)
+for(i in 1:50){
+  temp.df <- gen.df(0.5)
+  temp.bag <- randomForest(res~., data=temp.df, mtry=ncol(temp.df)-1, importance=T)
+  temp.bag.pred <- predict(temp.bag, q6.test)
+  err.bag[i] <- (mean(temp.bag.pred-q6.test$res)^2)
+  
+  temp.rf <- randomForest(res~., data=temp.df, mtry=3,importance=T)
+  temp.rf.pred <- predict(temp.rf, q6.test)
+  err.rf[i] <- (mean(temp.rf.pred-q6.test$res)^2)
+}
+
+err.bag.sigma <- mean(err.bag)
+err.rf.sigma <- mean(err.rf)
+paste("Err Bag / Err RF:", err.bag.sigma, "/",err.rf.sigma)
+```
+
+## (e)
+```{r}
+#no seed since it would just generate the same train set over and over
+variances <- c(0.01, 0.1, 0.25, 0.56, 1.5, 2.2, 24, 75)
+var.bag <- vector(mode="numeric",length = length(variances))
+var.rf <- vector(mode="numeric",length = length(variances))
+itt = 0
+for(var in variances){
+  err.bag2 <- vector(mode="numeric",length=50)
+  err.rf2 <- vector(mode="numeric", length = 50)
+  for(i in 1:50){
+    temp.df <- gen.df(var)
+    temp.bag <- randomForest(res~., data=temp.df, mtry=ncol(temp.df)-1, importance=T)
+    temp.bag.pred <- predict(temp.bag, q6.test)
+    err.bag2[i] <- (mean(temp.bag.pred-q6.test$res)^2)
+  
+    temp.rf <- randomForest(res~., data=temp.df, mtry=3,importance=T)
+    temp.rf.pred <- predict(temp.rf, q6.test)
+    err.rf2[i] <- (mean(temp.rf.pred-q6.test$res)^2)
+  }
+  itt = itt + 1
+  var.bag[itt] <- mean(err.bag2)
+  var.rf[itt] <- mean(err.rf2)
+}
+
+```
+```{r}
+par(mfrow=c(2,1))
+diff.err <- var.bag-var.rf
+plot(variances, diff.err, pch = 19)
+plot(variances[1:6], diff.err[1:6], pch=19)
+```
+
+It seems that as variance increases, the difference in the bag error and RF error increases. With the variance values that I tested, the RF performed better than bagging (positive difference means Bag Err > RF Err) at all variance values except 0.01. Therefore from my results I would conclude that Bag only outperforms RF at small variances. This follows from our discussion about SNR in class since as SNR increases we should expect the advantage of RF to decrease compared to bagging. As we increased the variance in the error (adding noise), the SNR decreased leading to a greater difference. As variance got smaller, SNR increased, leading to RF having less and less improvement over bagging. 

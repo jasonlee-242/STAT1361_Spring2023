@@ -1,0 +1,257 @@
+---
+title: "Homework_3"
+author: "Lee Jason"
+date: "2023-02-17"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+```{r packages, include=FALSE, warning = FALSE}
+# Insert the packages you need here
+library(ISLR2) #Auto data
+library(GGally) #Plotting
+library(MASS) #LDA
+library(e1071) #Naive Bayes
+library(class) #KNN
+```
+
+# 2. (16 points) 
+### (a) 
+#### (a)
+
+You will on average use 10% of the available observations. In a one-dimensional uniform situation, using 10% of the closest values will equate to 10% of the total observation set.
+
+#### (b)
+
+Now with two dimensions, you will use $0.1^2$ or 1% of the available observations as the number of total observations is also squared. 
+
+#### (c)
+
+$0.1^{100}$ or $1*10^{-100}$ of the available observations are used as the total number of observations is raised to the 100th power and 10% of each dimension is used.
+
+#### (d)
+
+As p grows, the percentage of "close points" approaches 0 suggesting that in a large dimension model, there are a decreasing number of neighbors that can actually be considered "close" across all p-dimensions to a new observation, decreasing the effectiveness of KNN.
+
+#### (e)
+
+The general formula for the length of the sides of the hypercube to encompass 10% of the available observation is $0.1^{1/p}$. p = 1 -> 0.1. p = 2 -> 0.316. p = 100 -> 0.977. As the number of predictors/dimensions grows, the lengths of the sides of the hypercube needs to grow as well to maintain the "use 10% of the available observations" characteristic. Therefore, we can see support for (d) that less and less neighbors can be considered "close" in KNN with large p. 
+  
+### (b) 
+
+Based on (e), we want to know how much of the possible observations are being used. If as the number of dimensions grow we still use 20% or some other high acceptable percentage of the observation space we can use the results we get from the model. The issue is when we have many more predictors than data points. This will cause a large amount of overfitting to occur, largly impacting our model. If the amount of data remains within an acceptable range of the number of predictors, the negative effects of having a large p is minimal. 
+
+### (c)
+
+The point that ISLR Ch. 4 Exercise 4 is trying to illustrate, is that in high dimensional space, you are often forced to **perform dimension reduction (remove data)**. Hint: This is a word you likely heard over and over again in introductory statistics and is something you were probably told to try and avoid doing.
+
+### (d) 
+
+I would disagree with the statement. Like most things in life, excess of anything is never good and there comes a point of diminishing returns. The correct statement should be "more *meaningful* data is never a bad thing". Addition of data that does not provide any new information can muddy our understanding of the true variables that contribute to the response (collinearity). Additionally, from a practical point of view, there becomes a point when more data doesn't improve the model or our understanding of the dataset enough to justify spending time and resources to gather the data. 
+
+# 3. (20 points)
+## ISLR Chapter 4 Conceptual Exercises 5 (8 points)
+### (a)
+
+QDA would perform better on the training set. With a higher flexibility than LDA, it would be able to account for any noise/error present in the data. However, its flexibility would also cause it to overfit to the noise and perform worse on a test set compared to a direct linear model. 
+
+### (b)
+
+We would expect QDA to perform better on the training data due to its flexible nature adjusting for any noise or error in the data. In general, we would expect QDA to perform better on the test set as well, but it is possible for LDA to perform better in certain scenarios such as with a small n. LDA might do better despite a non-linear boundary due to overfitting by QDA.
+
+### (c)
+
+We would expect the prediction accuracy of QDA to improve relative to LDA as the sample size increases. QDA is a more flexible model by nature, so it will better respond to any additional noise that is added by the increasing sample size. The non-linear nature of QDA also provides more possible fits to the data. 
+
+### (d)
+
+False. As noted in (a) and (b), there are scenarios in which QDA would perform worse on a test set. Namely when the decision boundary is linear or the data set has a small n. Overfitting is the biggest factor in increasing the test error rate for QDA models in these scenarios.
+
+
+## ISLR Chapter 4 Conceptual Exercises 8 (2 points)
+
+The best method is the one with the smaller test error as it is expected to better predict the class for observations it has never seen before. With an average error rate of 18%, we can infer that the KNN classifier must have a test error rate of 36%. This is because KNN is a local method that relies only on a subset of the training data for each prediction (the K-closest points). With only k = 1, providing the KNN with the same training set it was trained on with will therefore result in a 1-to-1 exact mapping of the training data to itself resulting in a 0% training error. If KNN has a 0% training error rate, the testing error rate must be 36%. Therefore, between logistic regression and the K-1 KNN classifier, logistic regression would be the better option as it has a lower testing error rate of 30%. 
+
+## ISLR Chapter 4 Conceptual Exercises 12 (10 points)
+### (a)
+
+$log(p/1-p) = \hat{\beta_0}+\hat{\beta_1}x$. Linear log odds. p = $\hat{Pr}(Y = orange | X = x)$
+
+### (b)
+
+$log(p_{orange}/p_{apple}) = \hat{\alpha}_{orange0} + \hat{\alpha}_{orange1}x - \hat{\alpha}_{apple0} - \hat{\alpha}_{apple1}x$. Still linear log odds.\ $p_{orange} = \hat{Pr}(Y = orange | X = x)$, $p_{apple} = \hat{Pr}(Y = apple | X = x)$
+
+### (c)
+
+$\hat{\beta_0} = 2 = \hat{\alpha}_{orange0} - \hat{\alpha}_{apple0}$\
+$\hat{\beta_1} = -1 = \hat{\alpha}_{orange1} - \hat{\alpha}_{apple1}$\
+
+$\hat{\alpha}_{orange0} = 3$\
+$\hat{\alpha}_{apple0} = 1$\
+$\hat{\alpha}_{orange1} = -2$\
+$\hat{\alpha}_{apple0} = -1$
+
+### (d)
+
+$\hat{\alpha}_{orange0} - \hat{\alpha}_{apple0} = 1.2 - 3 = \bf{-1.8 = \hat{\beta_0}}$\
+$\hat{\alpha}_{orange1} - \hat{\alpha}_{apple1} = -2 - 0.6 = \bf{-2.6 = \hat{\beta_1}}$
+
+### (e)
+
+They should agree 100% of the time if the coefficients of each of our models have the sum relation from (d). Both of our models have a linear log odds, so with the coefficients being directly related to each other and both models predicting the same thing (orange vs apple), we would expect them to give us the same predicted class each time. 
+
+# 4. (10 points)
+## ISLR Chapter 4 Applied Exercise 14
+### (a)
+```{r}
+mpg01 <- as.factor(as.numeric(Auto$mpg > median(Auto$mpg)))
+#Add mpg01 to Auto dataset
+Auto$mpg01 <- mpg01
+head(Auto,3)
+```
+
+### (b)
+```{r, warning = FALSE}
+#scatterplots with correlations
+ggpairs(subset(Auto, select= -c(name)))
+```
+
+According to the pairs plot mpg, cylinders, displacement, and weight predictors had the strongest correlation with mpg01.
+
+```{r}
+par(mfrow = c(2,2))
+boxplot(mpg~mpg01, data = Auto)
+boxplot(cylinders~mpg01, data = Auto)
+boxplot(displacement~mpg01, data = Auto)
+boxplot(weight~mpg01, data = Auto)
+```
+
+Of the four predictors above, cylinders, displacement and weight seem to be the strongest predictors for mpg01 according to the boxplots due to each having significant overlap between the mpg01 factors.
+
+### (c)
+```{r}
+set.seed(42)
+#75-25 train-test split of the data
+split.loc <- sample(c(TRUE,FALSE), nrow(Auto), replace=TRUE, prob = c(0.75,0.25))
+train.df <- Auto[split.loc,]
+test.df <- Auto[!split.loc,]
+```
+
+### (d)
+```{r}
+lda.model <- lda(mpg01~cylinders+displacement+weight, data=train.df)
+lda.model
+
+lda.pred <- predict(lda.model, test.df)
+test.error <- sum(lda.pred$class != test.df$mpg01)/nrow(test.df)
+paste("LDA Test Error: ", round(test.error*100,2),"%", sep="")
+```
+
+### (e)
+```{r}
+qda.model <- qda(mpg01~cylinders+displacement+weight, data=train.df)
+qda.model
+
+qda.pred <- predict(qda.model, test.df)
+qda.error <- sum(qda.pred$class != test.df$mpg01)/nrow(test.df)
+paste("QDA Test Error: ", round(qda.error*100,2),"%", sep="")
+```
+
+### (f)
+```{r}
+logistic.model <- glm(mpg01~cylinders+displacement+weight, data=train.df, family = "binomial")
+summary(logistic.model)
+
+logistic.pred <- predict(logistic.model, test.df, type="response")
+#convert any logistic prediction % above 50 to class 1, otherwise class 0
+logistic.one <- which(logistic.pred > 0.5)
+logistic.pred[logistic.one] <- 1
+logistic.pred[-logistic.one] <- 0
+
+logistic.error <- sum(logistic.pred != test.df$mpg01)/nrow(test.df)
+paste("Logistic Regression Error: ", round(logistic.error*100,2), "%", sep="")
+```
+
+### (g)
+```{r}
+nb.model <- naiveBayes(mpg01~cylinders+displacement+weight, data=train.df)
+nb.model
+
+nb.pred <- predict(nb.model, test.df)
+nb.error <- sum(nb.pred != test.df$mpg01)/nrow(test.df)
+paste("Naive Bayes Test Error: ", round(nb.error*100,2),"%",sep="")
+```
+
+### (h)
+```{r,warnings=FALSE}
+#Get the strongest predictors for mpg01 from (b)
+train.subset <- subset(train.df, select=c("cylinders","displacement","weight","mpg01"))
+test.subset <- subset(test.df, select=c("cylinders","displacement","weight","mpg01"))
+
+#10 random k-values to try
+k.values <- c(1,2,5,25,100,196,250,500,1000)
+#vector to hold the errors
+knn.errors <- vector(mode="numeric",length = length(k.values))
+#loop that runs the KNN model for each K, calculates the error, and adds it to the error vector
+for(i in 1:length(k.values)){
+  knn.pred <- knn(train.subset[-ncol(train.subset)], test.subset[-ncol(test.subset)], train.subset$mpg01, k = k.values[i])
+  knn.error <- sum(knn.pred != test.subset$mpg01)/nrow(test.subset)
+  knn.errors[i] = round(knn.error*100,2)
+}
+
+result <- data.frame(k.values,knn.errors)
+colnames(result) <- c("K", "Test Error (%)")
+result
+```
+
+Of the 9 values of K that I tested, K=250 performed the best with the lowest test error of 9.28%
+
+# 5. (12 points)
+### (a)
+
+The first plot seems to show a negative bias in the admission of females as there are much more rejections of female applicants compared to the number of admitted female applicants. A disproportionately large percentage of the admitted students were male suggesting a preference for male students. Of the 4526 students that applied to UCB, 1755 were accepted with ~68.2% of those students being male. The remaining ~38.2% were females.
+
+### (b)
+
+With the department plots, there is less evidence of bias. In most departments, the accepted applicants were split almost equally between males and females, and the amount of accepted applicants of each sex were nearly equivalent to the number of rejected applicants for that sex. Two departments, A and B, had a large number of male admits (seemingly >90%),but also had the same percentage of rejects. Women admitted applicants in A and B were much fewer overall, but had the around the same number of rejects as well. This suggests that there were few female applicants to those departments to begin with, and that there was no inherent bias against female applicants. 
+
+### (c)
+
+The observed trend in the admission data not accounting for department showed a negative bias for female applicants. However, within each individual department, there was no bias against female applicants. Each subpopulation based on department has no observable trend in preference for one sex, but when looked at as a whole without department, there seems to be a trend. The addition or absence of the department variable is causing our understanding of the data to change. 
+
+### (d)
+
+A possible confounding variable is *major*. Each department may specialize in  or offer a specific course of study that could attract a specific sex more than the other leading to a large difference in the number of applicants of a certain sex. Therefore despite having a near even number of male and female accepted applicants in 4 departments, there are 2 departments that greatly attract male applicants, thereby increasing the number of male applicants resulting in more male acceptances too.
+
+### (e)
+```{r}
+#From problem description
+data(UCBAdmissions)
+Adm <- as.integer(UCBAdmissions)[(1:(6*2))*2-1]
+Rej <- as.integer(UCBAdmissions)[(1:(6*2))*2]
+Dept <- gl(6,2,6*2,labels=c("A","B","C","D","E","F"))
+Sex <- gl(2,1,6*2,labels=c("Male","Female"))
+Ratio <- Adm/(Rej+Adm)
+berk <- data.frame(Adm,Rej,Sex,Dept,Ratio)
+head(berk)
+```
+```{r}
+#From problem description
+LogReg.gender <- glm(cbind(Adm,Rej)~Sex,data=berk,family=binomial("logit"))
+summary(LogReg.gender)
+```
+
+We see that the coefficient of for females is negative. This suggests that when only taking sex into account, the admission probability for female applicants decreases as more apply.
+
+### (f)
+```{r}
+#Add department feature
+LogReg.gender.department <- glm(cbind(Adm,Rej)~Sex + Dept,data=berk,family=binomial("logit"))
+summary(LogReg.gender.department)
+```
+
+After adding department, the coefficient for female switched from negative to slightly positive (relatively close to 0). We've been able to show that the inclusion or exclusion of some predictors can impact the observed trend in a set of data, even going as far as reversing it. This suggests that not all predictors are completely independent from each other and that features can have interaction effects as well as hidden compounding factors that may be influencing the model despite not being present in the model.  

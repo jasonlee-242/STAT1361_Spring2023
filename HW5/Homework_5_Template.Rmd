@@ -1,0 +1,398 @@
+---
+title: "1361_Homework_5_Template"
+author: "Lee_Jason"
+date: "2023-03-17"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, warning=FALSE}
+library(ISLR2)
+library(glmnet)
+library(pls)
+library(leaps)
+```
+
+
+## 2. 
+### ISLR Chapter 6 Conceptual Exercise 2 (10 pts)
+
+#### (a)
+
+iii. The shrinkage and feature selection characteristics of Lasso regression reduces the variance of the $\hat\beta$ predictors as $\lambda$ increases due to the minimization of RSS and the penalty term. Due to the shrinkage and removal of irrelevant predictors, the lasso has a small increase in bias (less flexible), but has a corresponding reduction in variance that makes up for it.
+
+#### (b)
+
+iii. Similar to Lasso, ridge regression results in lower variance of predictors $\hat\beta$ due to minimization of the RSS + penalty. While it doesn't perform feature selection (reducing $\hat\beta$ all the way to 0), the minimization of the predictors with the penalty still causes a small increase in the model bias with a decrease in variance.
+
+
+#### (c)
+
+ii. Non-linear methods are more flexible than the linear least squares due to having higher variance and can fit better to noise in the data. The more variance in the data, the better a non-linear model will fit to it relative to the least squares methods. Therefore, non linear methods with an increase in variance with a larger decrease in bias will result in better prediction accuracy. 
+
+### ISLR Chapter 6 Conceptual Exercise 3 (10 pts)
+#### (a)
+
+iv. As s increases we should see the RSS steadily decrease as the model flexibility increases due less of a bound on $\beta$. The increased flexibility results in a better RSS.
+
+#### (b)
+
+ii. We should initially see the test RSS decrease as the flexibility of the model increases and better identifies noise in the data. However, we will reach a point in which the flexibility becomes too much and overfitting begins. After this point, we will see the test RSS increase. 
+
+
+#### (c)
+
+iii. The variance should steadily increase as the model flexibility increases with the less restricting bound on $\beta$ as s grows. 
+ 
+#### (d)
+
+iv. Because of a steady increase in variance as shown in (c), there should be a corresponding decrease in bias due to bias-variance trade off. Therefore we should expect to see squared bias decrease as s grows.
+
+#### (e)
+
+v. Our irreducible error should be independent of the $\beta$ value in our model, so we shouldn't expect to see it change as s changes. 
+
+### ISLR Chapter 6 Conceptual Exercise 4 (10 pts)
+#### (a)
+
+iii. By minimizing the equation with the penalty term we will see shrinkage in $\hat\beta$ predictions. This leads to a less flexible model and therefore we should expect the RSS to increase as $\lambda$ increases.
+
+#### (b)
+
+ii. We should see a small initial decrease in test RSS as the decreased variance outweighs the increase in bias caused by the penalty. Once the penalty reaches a critical point that the increase in bias outweighs the decrease in variance, the test RSS should begin increasing as underfitting of the data reduces the model's ability to make predictions.
+
+#### (c)
+
+iv. As $\lambda$ increases we will see shrinkage in the $\beta$ predictions leading to increased bias with the trade off of decreased variance. Therefore as $\lambda$ increases, the variance will decrease.
+
+#### (d)
+
+iii. Opposite to (c) we should see the bias increase as the $\lambda$ increases since the model flexibility (variance) decreases. 
+
+#### (e)
+
+v. The irreducible error is still independent from the model and $\lambda$ so we it should remain constant despite increases in $\lambda$.
+
+## 3.
+### ISLR Chapter 6 Applied Exercise 9 (14 pts)
+```{r}
+data(College)
+```
+
+#### (a)
+```{r}
+set.seed(1)
+train <- sample(c(1:nrow(College)), 0.7*nrow(College), replace=F)
+train.set <- College[train,]
+test.set <- College[-train,]
+```
+
+#### (b)
+```{r}
+model1 <- lm(Apps~., data=train.set)
+lm.pred <- predict(model1, test.set)
+test.mse<-mean((test.set[,2]-lm.pred)^2)
+paste("Test MSE:",round(test.mse,3))
+```
+
+#### (c)
+```{r}
+train.mat<-model.matrix(Apps~.,data=train.set)
+test.mat<-model.matrix(Apps~.,data=test.set)
+
+grid<-10^seq(10,-2,length=100)
+ridge.mod<-glmnet(train.mat,train.set$Apps,alpha=0,lambda=grid)
+
+set.seed(2)
+cv.out<-cv.glmnet(train.mat,train.set$Apps,alpha=0)
+bestlam<-cv.out$lambda.min
+
+pred.newridge<-predict(ridge.mod,s=bestlam,newx =test.mat)
+
+mean((test.set$Apps-pred.newridge)^2)
+```
+
+#### (d)
+```{r}
+lasso.mod<-glmnet(train.mat,train.set$Apps,alpha=1,lambda=grid)
+
+cv.lasso<-cv.glmnet(train.mat,train.set$Apps,alpha=1,lambda=grid)
+
+bestlam.l<-cv.lasso$lambda.min
+
+pred.lasso<-predict(lasso.mod,s=bestlam.l,newx=test.mat)
+
+mean((test.set$Apps-pred.lasso)^2)
+
+lasso.coef <- predict(lasso.mod,s=bestlam.l,type="coefficients")
+paste("Non-zero:", length(lasso.coef[lasso.coef != 0]))
+```
+
+#### (e)
+```{r}
+set.seed(3)
+pcr.fit<-pcr(Apps~.,data=train.set,scale=TRUE,validation="CV")
+validationplot(pcr.fit,val.type="MSEP")
+
+pcr.pred<-predict(pcr.fit,test.set,ncomp=17)
+mean((test.set$Apps-pcr.pred)^2)
+
+print("Cross Validation (plot) shows that number of components = 17 has the lowest MSEP (cv error).")
+```
+
+#### (f)
+```{r}
+pls.fit<-plsr(Apps~.,data=train.set,scale=TRUE,validation="CV")
+validationplot(pls.fit,val.type="MSEP")
+
+pls.pred<-predict(pls.fit,test.set,ncomp=11)
+mean((test.set$Apps-pls.pred)^2)
+
+print("CV resulted in ~11 components being the minimum MSEP.")
+```
+
+#### (g)
+```{r}
+test.avg <- mean(test.set$Apps)
+lm.r2 <- 1 - mean((lm.pred - test.set$Apps)^2) / mean((test.avg - test.set$Apps)^2)
+ridge.r2 <- 1 - mean((pred.newridge - test.set$Apps)^2) / mean((test.avg - test.set$Apps)^2)
+lasso.r2 <- 1 - mean((pred.lasso - test.set$Apps)^2) / mean((test.avg - test.set$Apps)^2)
+pcr.r2 <- 1 - mean((pcr.pred - test.set$Apps)^2) / mean((test.avg - test.set$Apps)^2)
+pls.r2 <- 1 - mean((pls.pred - test.set$Apps)^2) / mean((test.avg - test.set$Apps)^2)
+
+paste(lm.r2, ridge.r2, lasso.r2, pcr.r2, pls.r2)
+```
+
+All the models performed pretty well with r^2 above 0.9. Ridge regression seemed to do the best out of the 5 with r^2 of 0.923.
+
+
+### ISLR Chapter 6 Applied Exercise 10 (14 pts)
+#### (a)
+```{r}
+set.seed(42)
+my.mat<-matrix(rnorm(1000*20),1000,20)
+b<-matrix(rnorm(20),20,1)
+zerod <- sample(1:20, 5)
+b[zerod] <- 0
+error<-rnorm(1000)
+my.res<-my.mat%*%b+error
+```
+#### (b)
+```{r}
+locs <- sample(1:1000, 900)
+train.b <- my.mat[locs,]
+test.b <- my.mat[-locs,]
+train.y <- my.res[locs,]
+test.y <- my.res[-locs,]
+```
+
+#### (c)
+```{r}
+df.train <- data.frame(y = train.y, x = train.b)
+regfit.full <- regsubsets(y ~ ., data = df.train, nvmax = 20)
+t.mat <- model.matrix(y ~ ., data = df.train, nvmax = 20)
+err <- rep(NA, 20)
+for (i in 1:20) {
+    idk <- coef(regfit.full, id = i)
+    pred <- t.mat[, names(idk)] %*% idk
+    err[i] <- mean((pred - train.y)^2)
+}
+plot(err, xlab = "Number of predictors", ylab = "Training MSE", pch = 19, type = "b",col="blue")
+```
+
+#### (d)
+```{r}
+df.test <- data.frame(y = test.y, x = test.b)
+my.test <- model.matrix(y ~ ., data = df.test, nvmax = 20)
+err2 <- rep(NA, 20)
+for (i in 1:20) {
+    idk2 <- coef(regfit.full, id = i)
+    pred <- my.test[, names(idk2)] %*% idk2
+    err2[i] <- mean((pred - test.y)^2)
+}
+plot(err2, xlab = "Number of predictors", ylab = "Test MSE", pch = 19, type = "b",col="red")
+```
+
+#### (e)
+```{r}
+which.min(err2)
+min(err2)
+```
+
+The model with 14 features has the lowest test MSE at around 0.983.
+
+#### (f)
+```{r}
+coef(regfit.full, 14)
+```
+
+The best subset model was able to identify and remove the zeroed $\beta$ that were set in (a), but also removed feature 3 that was not zeroed. 
+
+```{r}
+comp <- data.frame(b[-zerod],coef(regfit.full,14))
+colnames(comp) <- (c("Full", "BSS"))
+comp
+```
+
+A side by side comparison between the true model and the best subset selection shows that the coefficients are pretty close. 
+
+#### (g)
+```{r}
+my.err <- rep(NA, 20)
+x_cols = colnames(my.mat, do.NULL = FALSE, prefix = "x.")
+for (i in 1:20) {
+    coi <- coef(regfit.full, id = i)
+    my.err[i] <- sqrt(sum((my.res[x_cols %in% names(coi)] - coi[names(coi) %in% x_cols])^2) + sum(my.res[!(x_cols %in% names(coi))])^2)
+}
+plot(my.err, xlab = "Number of Predictors", ylab = "Coef MSE", pch = 19, type = "b")
+```
+
+MSE seems to increase with number of predictors. It seems inverted to the plot from d. I'm pretty sure I did this wrong.
+
+## 4. (14 pts)
+
+### (a)
+```{r}
+set.seed(1)
+rand.name <- matrix(rnorm(1000), 100, 10)
+beta <- matrix(c(rep(1,5), rep(0,5)),10,1)
+error <- rnorm(100,0,0.5)
+res <- rand.name%*%beta+error
+train.prob4 <- data.frame(rand.name, res)
+```
+
+### (b)
+```{r}
+set.seed(2)
+rand.name2 <- matrix(rnorm(10000), 1000, 10)
+beta2 <- matrix(c(rep(1,5), rep(0,5)),10,1)
+error2 <- rnorm(1000,0,0.5)
+res <- rand.name2%*%beta2+error2
+test.prob4 <- data.frame(rand.name2, res)
+```
+
+### (c)
+```{r}
+train.mat<-model.matrix(res~.,data=train.prob4)
+test.mat<-model.matrix(res~.,data=test.prob4)
+
+grid<-10^seq(10,-2,length=100)
+
+lasso.p4<-glmnet(train.mat,train.prob4$res,alpha=1,lambda=grid)
+
+cv.lasso<-cv.glmnet(train.mat,train.prob4$res,alpha=1,lambda=grid)
+
+bestlam<-cv.lasso$lambda.min
+
+pred.lasso<-predict(lasso.p4,s=bestlam,newx =test.mat)
+
+err.lasso.1 <- mean((test.prob4$res-pred.lasso)^2)
+err.lasso.1
+```
+
+### (d)
+```{r}
+lasso.coef <- predict(lasso.p4,s=bestlam,type="coefficients")
+lasso.coef
+lasso.coef[lasso.coef != 0]
+```
+
+Lasso selected X1,X2,X3,X4,X5,X6,X9
+
+```{r}
+my.lm <- lm(res~X1+X2+X3+X4+X5+X6+X9, data=train.prob4)
+lm.pred <- predict(my.lm, test.prob4)
+err.ols.1 <- mean((test.prob4$res-lm.pred)^2)
+```
+
+### (e)
+```{r}
+err.lasso <- vector(mode="numeric", length = 1000)
+err.ols <- vector(mode="numeric", length = 1000)
+
+for(i in 1:1000){
+  rand.name <- matrix(rnorm(1000), 100, 10)
+  beta <- matrix(c(rep(1,5), rep(0,5)),10,1)
+  error <- rnorm(100,0,0.5)
+  res <- rand.name%*%beta+error
+  train.prob <- data.frame(rand.name, res)
+  
+  train.mat<-model.matrix(res~.,data=train.prob)
+  lasso.p4<-glmnet(train.mat,train.prob$res,alpha=1,lambda=grid)
+  cv.lasso<-cv.glmnet(train.mat,train.prob$res,alpha=1,lambda=grid)
+  bestlam<-cv.lasso$lambda.min
+  pred.lasso<-predict(lasso.p4,s=bestlam,newx=test.mat)
+  err.lasso[i] <- mean((test.prob4$res-pred.lasso)^2)
+  lasso.coef <- predict(lasso.p4,s=bestlam,type="coefficients")
+
+  train.prob[,-c((which(lasso.coef == 0) -2)[-1])]
+  my.lm <- lm(res~., data=train.prob)
+  lm.pred <- predict(my.lm, test.prob4)
+  err.ols[i] <- mean((test.prob4$res-lm.pred)^2)
+}
+```
+
+```{r}
+paste("Err Lasso (0.5):", mean(err.lasso))
+paste("Err OLS (0.5):", mean(err.ols))
+```
+
+### (f)
+```{r}
+my.vars <- c(0.01, 0.05, 0.25, 0.5, 1, 25, 100)
+err.lasso.plot <- vector(mode = "numeric", length(my.vars))
+err.ols.plot <- vector(mode = "numeric", length(my.vars))
+for(j in 1:length(my.vars)){
+  err.lasso <- vector(mode = "numeric", 1000)
+  err.ols <- vector(mode = "numeric", 1000)
+  for(i in 1:1000){
+    rand.name <- matrix(rnorm(1000), 100, 10)
+    beta <- matrix(c(rep(1,5), rep(0,5)),10,1)
+    error <- rnorm(100,0,0.5)
+    res <- rand.name%*%beta+error
+    train.prob <- data.frame(rand.name, res)
+  
+    rand.name2 <- matrix(rnorm(10000), 1000, 10)
+    beta2 <- matrix(c(rep(1,5), rep(0,5)),10,1)
+    error2 <- rnorm(1000,0,0.5)
+    res <- rand.name2%*%beta2+error2
+    test.prob4 <- data.frame(rand.name2, res)
+  
+    train.mat<-model.matrix(res~.,data=train.prob)
+    test.mat<-model.matrix(res~.,data=test.prob4)
+  
+    lasso.p4<-glmnet(train.mat,train.prob$res,alpha=1,lambda=grid)
+    cv.lasso<-cv.glmnet(train.mat,train.prob$res,alpha=1,lambda=grid)
+    bestlam<-cv.lasso$lambda.min
+    pred.lasso<-predict(lasso.p4,s=bestlam,newx=test.mat)
+    err.lasso[i] <- mean((test.prob4$res-pred.lasso)^2)
+    lasso.coef <- predict(lasso.p4,s=bestlam,type="coefficients")
+
+    train.prob[,-c((which(lasso.coef == 0) -2)[-1])]
+    my.lm <- lm(res~., data=train.prob)
+    lm.pred <- predict(my.lm, test.prob4)
+    err.ols[i] <- mean((test.prob4$res-lm.pred)^2)
+  }
+  err.lasso.plot[j] <- mean(err.lasso)
+  err.ols.plot[j] <- mean(err.ols)
+}
+```
+
+```{r}
+library(ggplot2)
+ggplot() +                    # basic graphical object
+  geom_line(aes(x=my.vars,y=err.lasso.plot), colour="red") +  # first layer
+  geom_line(aes(x=my.vars,y=err.ols.plot), colour="green") 
+```
+
+Both look similar across the sigma values. At small sigma there is a sharp peak and quick rise in error. Past sigma of 25, error continues to grow at a moderate pace.
+
+### (g)
+
+Lasso has less DOF due to being more biased/less flexible than OLS since it introduces a penalty term. Due to this, we would expect lasso to perform better at low SNR since OLS would overfit to noise. At higher SNR, OLS should begin to perform better. 

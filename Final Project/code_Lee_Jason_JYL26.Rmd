@@ -1,0 +1,382 @@
+---
+title: "STAT1361 Final Project"
+author: "Jason Lee"
+date: "2023-04-18"
+editor_options:
+  chunk_output_type: console
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Necessary Libraries
+```{r, warning=FALSE}
+#Uncomment the install line if any packages not on your machine
+#install.packages(c("GGally", "ggplot2", "gridExtra","caret","regclass", "leaps","glmnet","randomForest","knitr"))
+library(GGally)
+library(ggplot2)
+library(gridExtra)
+library(caret)
+library(regclass)
+library(leaps)
+library(glmnet)
+library(randomForest)
+library(knitr)
+```
+
+# Loading Data
+```{r}
+#Load Training and Test data
+housing.train.df <- read.csv("train.csv", header=T, sep = ",")
+housing.test.df <- read.csv("test.csv",header=T,sep=",")
+```
+
+# Dataset Analysis
+```{r}
+#NA analysis of the training dataset
+paste("Number of NAs:",sum(is.na(housing.train.df)))
+
+#View subset of the data, identify predictor types
+head(housing.train.df,3)
+
+#Dataset Summary
+summary(housing.train.df)
+```
+
+We observe that there are no missing values, so there is no need to remove any observations or perform imputation. The summary shows 4 categorical variables and 12 quantitative varaibles with a quantitative response variable.  
+
+```{r}
+#View how each of the quantitative predictors+response are correlated
+#Special pairs plot from GGally and correlation matrix
+ggpairs(housing.train.df[,-c(1,3,6,7,17)])
+cor(housing.train.df[,-c(1,3,6,7,17)])
+
+#Evaluating distribution of Response, heavily right skewed
+hist(housing.train.df$price, breaks = 10, xlab="Housing Price")
+```
+
+According to the ggpairs() function, around 9 of the quantitative predictors have a significant relationship with the response "price". 5 of these 9 have a moderate to strong positive linear correlation with the response. The corresponding scatterplots seem to support this conclusion as well. The distribution of the response is heavily right skewed, requiring further analysis. 
+
+```{r}
+#Check correlation of significant variables from GGally against response
+reg.plots <- list()
+reg.names <- c("numstories","yearbuilt","totalrooms","bedrooms","bathrooms","fireplaces", "sqft", "lotarea", "AvgIncome")
+reg.loc <- c(4,5,9:14,16)
+for(i in 1:9){
+  #Scatterplots of variables against price w/ best linear fit + 95% CI
+  plot <- ggplot(housing.train.df, aes(housing.train.df[,reg.loc[i]], price)) +
+          geom_point() +
+          geom_smooth(method = "lm", se = TRUE)+
+          xlab(reg.names[i])
+  reg.plots[[length(reg.plots)+1]] <- ggplotGrob(plot)
+}
+grid.arrange(grobs = reg.plots, ncol=3)
+```
+
+A plot of the significant quantitative predictors against price show that there is a decent linear relationship with the response for most of them. I also observe some points that could be outliers or leverage points. Some of the scatterplots show possible polynomial correlation. I will check more of the linearity conditions. 
+
+```{r}
+#Distribution of categorical variables against price
+plots <- list()
+cat.names <- c("desc", "exteriorfinish", "rooftype", "location")
+cat.loc<- c(3,6,7,17)
+for(i in 1:4){
+  #Boxplot of the 4 categorical variables against price
+  plot <- ggplot(housing.train.df) +
+          geom_boxplot(aes(x = housing.train.df[,cat.loc[i]] , y = price))+
+          xlab(cat.names[i])
+  plots[[i]] <- ggplotGrob(plot)
+}
+grid.arrange(grobs = plots, ncol = 2)
+```
+
+Boxplots of the categorical predictors against price show that the categorical variables may have a linear relationship with house price since the central tendencies are not significantly different among the various categories of the predictors. There are quite a few noticeable outliers. 
+
+```{r,warning=FALSE}
+#Normality Plots of significant quantitative variables
+par(mfrow = c(3, 3))
+names <- c("numstories","yearbuilt","totalrooms","bedrooms","bathrooms","fireplaces", "sqft", "lotarea", "AvgIncome")
+loc <- c(4,5,9:14,16)
+for(i in 1:9){
+  temp.model <- lm(price~housing.train.df[,loc[i]], data=housing.train.df)
+  temp.resid <- residuals(temp.model) #Model Residuals
+  #Residual Distribution
+  hist(temp.resid, breaks=6,xlab="Residuals",title=names[i])
+}
+```
+```{r,warning=FALSE}
+#Homoscedasticity Plots of significant quantitative variables
+par(mfrow = c(3, 3))
+names2 <- c("numstories","yearbuilt","totalrooms","bedrooms","bathrooms","fireplaces", "sqft", "lotarea", "AvgIncome")
+loc2 <- c(4,5,9:14,16)
+for(i in 1:9){
+  temp.model <- lm(price~housing.train.df[,loc2[i]], data=housing.train.df)
+  temp.pred <- predict(temp.model) #Model Prediction
+  temp.resid <- residuals(temp.model) #Model Residuals
+  plot(temp.pred, temp.resid, xlab = "Predict", ylab="Residual", main=names2[i])
+  abline(a=0, b=0)
+}
+```
+
+Conclusion from Data Analysis: It seems that there is a moderate linear relationship between some of the predictors and the response when predicting housing prices. However, this linear relationship is not promising given that quite a few predictors did not pass all the conditions for linearity. There weren't any obvious non-linear relationships that appeared, so it is possible that leveraged points and outliers greatly affected my homoscedascticity and normality graphs. Therefore, I will predict housing prices using both non-linear and linear models to see which performs better. 
+
+# Creating Validation Set
+```{r}
+set.seed(1)
+
+#Training House IDs
+id <- housing.train.df[,1]
+
+#80/20 split of training data -> validation set 
+num.obs <- nrow(housing.train.df)
+vald.loc <- sample(1:num.obs, 0.2*num.obs, replace=FALSE)
+
+#One-hot encoding of categorical variables
+ohe<-dummyVars("~.",data=housing.train.df[,-1])
+housing.ohe <- data.frame(id, predict(ohe,housing.train.df))
+
+#Split data into validation set + training
+housing.val <- housing.ohe[vald.loc,]
+housing.train <- housing.ohe[-vald.loc,]
+
+#check for correct 80/20 split
+if(nrow(housing.val) != 0.2*num.obs){
+  cat("Validation set generated incorrectly")
+}
+```
+
+# Linear Regression Tests
+```{r}
+#Training dataset w/ no ID column
+housing.no.id <- housing.train[,-1]
+#Linear model of all variables, no modifications (besides one-hot encoding)
+my.model1 <- lm(price~., data=housing.no.id)
+summary(my.model1) #model summary
+```
+
+5 predictors were shown to not contribute to the model (some due to high collinearity with other predictors).
+
+```{r}
+#Removal of the 5 problematic predictors
+redone <- lm(price~.,data=housing.no.id[,-c(6,12,14,18,30)])
+
+#Get the MSE of the linear regression -> use as personal base MSE to beat
+#MSE: On the order of 10^12 (3.7*10^11)
+pred <- predict(redone, housing.val)
+lin.reg.mse <- round(mean((housing.val$price-pred)^2))
+paste("Linear Reg MSE:", lin.reg.mse)
+```
+
+This MSE is really high, but will serve as a reference for my future models. All sensible predictors were included, no modifications were made to the predictors except for one-hot encoding of categorical predictors. Only one validation set was used, it is possible that this was the worst possible validation set that could have been made. 
+
+```{r}
+#New dataframe w/o the problematic predictors to avoid redundancy
+housing.NODEP <- housing.no.id[,-c(6,12,14,18,30)]
+VIF(redone) #Get the VIF values of the remaining predictors 
+cor(housing.NODEP) #Correlation matrix
+```
+
+Due to one-hot encoding and a gut feeling, I felt that co-linearity might be contributing to the high MSE. My analysis using VIF resulted in me deciding to remove exteriorFinishBrick, fireplace, and totalrooms while combining bed+bath.
+
+```{r}
+#Resolving co-linearity
+bed.bath <- housing.NODEP[,"bedrooms"] + housing.NODEP[,"bathrooms"] #Linear combination of bed+bath
+housing.NOCOL <- housing.NODEP[,-c(8,16,17,18,19)] #removal of co-linear predictors
+housing.NOCOL$bedBath <- bed.bath #adding the combined bed+bath predictor
+```
+```{r}
+#Followed the same co-linearity resolution steps as above for the validation set
+val.bb <- housing.val[,"bedrooms"] + housing.val[,"bathrooms"]
+reg.val <- housing.val[,-c(1,7,10,13,15,19,21,22,23,24,31)]
+reg.val$bedBath <- val.bb
+
+#Retrain model on new datasets
+fix.col <- lm(price~.,data=housing.NOCOL)
+pred2 <- predict(fix.col, reg.val) #new prediction for validation set
+col.reg.mse2 <- round(mean((reg.val$price-pred2)^2))
+paste("New Linear Reg MSE:",col.reg.mse2) #New MSE 
+```
+
+VIFs are all at a reasonable level now (all < 4), but resolving colinearity did not improve the model. It is highly likely that not all of the remaining predictors contribute well to determining response. From the initial model, quite a few were determined to not be significant in predicting price. Therefore I want to try a model subset selection method. I'll use forward stepwise selection.
+
+Forward Stepwise
+```{r}
+#Performing forward selection
+regfit.full <- regsubsets(price~.,housing.train[,-c(1,7,13,15,19,31)],method = "forward")
+reg.summary <- summary(regfit.full)
+coef(regfit.full, which.max(reg.summary$adjr2)) #get the chosen predictors based on Adjusted R2
+```
+```{r}
+#Getting MSE of the forward selection model
+coefi <- coef(regfit.full, id = which.max(reg.summary$adjr2))
+test.mat <- model.matrix(price ~ ., data = housing.val[,-c(1,7,13,15,19,31)])
+pred.w <- test.mat[, names(coefi)] %*% coefi
+f.step <- mean((housing.val$price - pred.w)^2)
+f.step
+```
+
+Forwards Stepwise selection did not choose a better model. It seems that the model does not have an underlying true linear relationship as the regular linear model with no modification has beat out both co-linearity fixed and forward selection.
+
+Lasso Regression
+```{r}
+#Lasso Regression
+grid <- 10^seq(10, -2, length = 100)
+#Since co-linearity didn't work, I'm using the original dataset with problematic
+#predictors removed (from initial regression model)
+house.lasso <- model.matrix(price ~., housing.train[,-c(1,7,13,15,19,31)])[,-1]
+house.val <- model.matrix(price~., housing.val[,-c(1,7,13,15,19,31)])[,-1]
+house.y <- housing.train[,2]
+```
+```{r}
+set.seed(42)
+#cross validation lasso 
+lasso.mod <- glmnet(house.lasso,house.y, alpha = 1, lambda = grid)
+cv.out <- cv.glmnet(house.lasso,house.y, alpha = 1, lambda=grid)
+bestlam <- cv.out$lambda.min
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = house.val)
+lasso.mse <- mean((lasso.pred - housing.val[,2])^2) #Get the Test MSE for lasso model
+lasso.mse
+```
+
+Lasso Regression did end up improving the MSE a little for this validation set. This supports the idea that not all of the predictors are useful in predicting price.
+
+```{r}
+#Check which predictors ended up being zeroed out
+out <- glmnet(house.lasso,house.y,alpha = 1, lambda=grid)
+lasso.coef <- predict(out, type = "coefficients", s=bestlam)
+lasso.coef
+```
+
+13 Predictors were not zeroed out.
+It's clear pure linear models are having trouble with predicting the housing price, so I'll move to some non-linear models.
+
+# Non-linear Random Forest
+
+Random Forest Regression
+```{r}
+set.seed(99)
+numPred <- 13 #The 13 predictors chosen from the lasso model 
+errors <- vector(mode="numeric",length = 7)
+#New train + validation datasets for random forest using the lasso predictors 
+forest.house <- housing.no.id[,c("price","descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+forest.val <- housing.val[,c("price","descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+#Tuning mtry values up to half of numPred and save the MSE at each value, keep ntree at default 500
+for(i in 1:7){
+  housing.bag<-randomForest(price~.,data = forest.house, mtry = i)
+  pred.bag <- predict(housing.bag, forest.val[,-1]) #RF Prediction 
+  errors[i] <- mean((pred.bag - forest.val$price)^2) #MSE
+}
+rf.mse <- errors[which.min(errors)]
+rf.mse
+```
+```{r}
+#Check variable importance from the predictors
+var_imp <- importance(randomForest(price~.,data=forest.house,mtry=2))
+var_imp
+```
+
+```{r}
+#Do the same thing as above, but use the full model (not lasso)
+set.seed(99)
+numPred.full <- 25
+errors.full <- vector(mode="numeric", length=numPred.full)
+forest.house.full <- housing.NODEP
+forest.val.full <- housing.val[,-c(1,7,13,15,19,31)]
+#Tuning of mtry across all 25 variables, save MSE at each value
+for(j in 1:numPred.full){
+  temp.bag<-randomForest(price~.,data=forest.house.full,mtry=j)
+  temp.pred<- predict(temp.bag, forest.val.full[,-1])
+  errors.full[j] <- mean((temp.pred-forest.val.full$price)^2)
+}
+full.err <- errors.full[which.min(errors)]
+full.err
+```
+
+The model trained on the predictors suggested by lasso performed better.
+
+```{r}
+#Compare the MSE from all the models used so far in a table
+mse.results <- data.frame(
+  Model <- c("Linear Regression (No Modifications)", "Linear Regression (Fixed Collinearity)", "Forwards Stepwise Selection", "Lasso Regression", "Random Forest (Lasso)", "Random Forest (Full)"),
+  MSE <- c(lin.reg.mse, col.reg.mse2, f.step, lasso.mse, rf.mse, full.err))
+kable(mse.results,col.names = c("Model","MSE"),caption = "Model MSE")
+```
+
+Random Forest with the 13 lasso chosen predictors had the best MSE of all models tested on the *single* validation set I created earlier. Therefore I will use RF with lasso'd predictors as my primary model for predicting house prices. 
+
+
+Final 10-fold Cross Validation of Best Performing Model (Random Forest)
+```{r}
+set.seed(50)
+numPred <- 13
+mean.err <- vector(mode="numeric",length=10)
+min.errs <- vector(mode="numeric",length=10)
+which.mtry <- vector(mode="numeric",length=10)
+par(mfrow=c(4,2))
+#10-fold CV 
+for(k in 1:10){
+  
+  #generate a new sample dataset for each fold 
+  where.val <- sample(1:nrow(housing.ohe),0.2*nrow(housing.ohe),replace=F)
+  rf.train<-housing.ohe[-where.val,]
+  rf.val <- housing.ohe[where.val,]
+  
+  errors <- vector(mode="numeric",length = 7)
+  
+  forest.house <- rf.train[,c("price","descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+  forest.val <- rf.val[,c("price","descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+  
+  #Train the random forest for 7 mtry values, default 500 trees
+  for(i in 1:7){
+    housing.bag<-randomForest(price~.,data = forest.house, ntree=500, mtry = i)
+    pred.bag <- predict(housing.bag, forest.val[,-1])
+    errors[i] <- mean((pred.bag - forest.val$price)^2)
+  }
+  
+  #observing the MSE for the mtry values, just for curiosity
+  #plot(1:7, errors, xlab="mtry", ylab="MSE")
+  
+  mean.err[k] <- mean(errors) #mean MSE for each fold
+  min.errs[k] <- min(errors) #minimum MSE for each fold
+  which.mtry[k] <- which.min(errors) #which value of mtry was the best
+}
+```
+```{r}
+mean.err[which.min(mean.err)]
+table(which.mtry) #check which value of mtry seemed to perform the best most of the time
+```
+
+Compared to the initial linear model, RF has performed much better by generating lower MSEs in general.
+
+Getting Test Prices
+```{r}
+set.seed(2023)
+#one-hot encoding the test set
+ohe.test<-dummyVars("~.",data=housing.test.df[,-c(1,2)])
+test.id <- housing.test.df[,1]
+test.ohe <- data.frame(test.id, predict(ohe.test,housing.test.df))
+
+#Subsetting the training dataset based on the 13 lasso predictors
+final.forest.house <- housing.ohe[,c("price","descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+#subsetting the test dataset based on the 13 lasso predictors
+final.forest.test <- test.ohe[,c("descROWHOUSE","numstories","yearbuilt","exteriorfinishBrick","exteriorfinishConcrete","rooftypeROLL","rooftypeSHINGLE","basement","bathrooms","sqft", "lotarea","zipcode","AvgIncome")]
+
+#Random Forest model with ntree=500, mtry=4 combination to predict housing price
+final.bag <- randomForest(price~.,data=final.forest.house, ntree = 500, mtry = 4)
+#Test set price prediction
+final.pred <- round(predict(final.bag, final.forest.test),2) 
+
+#Creating the predictions dataset
+final.predictions <- data.frame(id = test.id, price = final.pred)
+```
+
+```{r}
+#Save the test predictions
+write.csv(final.predictions, file = "testing_predictions_Lee_Jason_JYL26.csv", row.names = TRUE)
+par(mfrow=c(1,2))
+#Distribution of my price predictions versus the distribution of prices in the training set
+hist(housing.train.df$price, main="Training Dist.", xlab="Price")
+hist(final.predictions$price, main = "Test Dist.", xlab="Predicted Price")
+```
+
+The distribution of prices in the training set is roughly equal to my predicted prices. However, the range of my predicted prices is much smaller than the range of prices in the training set.

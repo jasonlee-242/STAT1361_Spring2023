@@ -1,0 +1,320 @@
+---
+title: "STAT1361_HW4"
+author: "Jason Lee"
+date: "2023-03-03"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 2. (4 pts)
+### ISLR Chapter 5 Conceptual Exercise 4
+
+We should use the bootstrap method to obtain B repeated random samples with replacement from the original data set. From CLT, we can then find the corresponding estimates and the standard deviation of those B estimates to get the SD of our prediction using the formula in the textbook calculating the Standard Error of bootstrap estimates.
+
+## 3. (12 pts) 
+Here we’ll look at the relationship between undergraduate GPA and LSAT scores amongst individuals applying to law school.
+**Please see homework PDF for the rest of the questions**
+
+```{r}
+library(bootstrap)
+data(law)
+```
+
+### (a)
+```{r}
+plot(law, pch = 19)
+my.cor <- cor(law$LSAT, law$GPA) #Original Estimate
+paste("Correlation:", round(my.cor,3))
+```
+
+There is a moderately strong correlation between LSAT and GPA at r = ~0.78.
+
+### (b)
+```{r}
+set.seed(1)
+bootrep <- 1000
+boot.cor <- vector(mode="numeric", length = bootrep) #bootstrap estimates
+for(i in 1:bootrep){
+  temp <- law[sample(nrow(law),nrow(law), replace = T),]
+  boot.cor[i] <- cor(temp[,1],temp[,2])
+}
+
+hist(boot.cor)
+abline(v = my.cor, col="red")
+```
+
+### (c)
+```{r}
+upper.bound <- quantile(boot.cor, 0.975)
+lower.bound <- quantile(boot.cor, 0.025)
+hist(boot.cor)
+abline(v = my.cor, col="red")
+abline(v = upper.bound, col="blue")
+abline(v = lower.bound, col = "blue")
+paste("(",round(lower.bound,3),",",round(upper.bound,3),")",sep="")
+```
+
+At a 95% CI, we fail to reject the null hypothesis that the true correlation is 0.5 since the CI contains the value 0.5.
+
+### (d)
+```{r}
+#Estimate of bias for correlation: Bagged Estimate - original estimate
+bagged.cor <- sum(boot.cor) / length(boot.cor)
+paste("Estimate of bias (cor):", round(bagged.cor-my.cor,3))
+#Bias corrected Estimate
+bc.estimate <- 2*my.cor - bagged.cor
+paste("Estimate for bias corrected estimate (cor):", round(bc.estimate,3))
+
+#Bias corrected bootstrap CI
+ci.lower <- 2*my.cor-upper.bound
+ci.upper <- 2*my.cor-lower.bound
+paste("(",round(ci.lower,3),",",round(ci.upper,3),")",sep="")
+hist(boot.cor)
+abline(v = my.cor, col="red")
+abline(v = upper.bound, col="blue")
+abline(v = lower.bound, col = "blue")
+abline(v=ci.lower, col = "green")
+abline(v=ci.upper, col = "green")
+```
+
+We can reject the null hypothesis than 0.5 is the true correlation as it is not contained within the CI.
+
+### (e)
+```{r}
+#H0: cor(GPA, LSAT) = 0; Ha: cor(GPA, LSAT) > 0
+#Original: 0.776
+set.seed(4)
+perm.count <- 1500
+perm.vals <- vector(mode="numeric",length=perm.count)
+for(i in 1:perm.count){
+  perm.lsat <- sample(law$LSAT,nrow(law),replace=F)
+  perm.vals[i] <- cor(law$GPA, perm.lsat)
+}
+
+hist(perm.vals)
+q <- quantile(perm.vals,0.95)
+abline(v=my.cor,col="red")
+abline(v=q, col="blue")
+
+p.val <- sum(perm.vals>my.cor)/perm.count
+paste(p.val)
+```
+
+We see that the original correlation statistic lies above the alpha=0.05 (0.95) quantile, so we can reject the null hypothesis that the true correlation is 0. Our p-value is also less than the alpha level.
+
+
+## 4. (20 pts)
+
+With linear models, we make relatively strong assumptions about the underlying rela- tionships and distributions and these assumptions allow us to provide standard inferential results (confidence intervals and hypothesis tests). Now we’ll look at how we could carry out an informal alternative with permutation tests. That is, we’ll think about how we could try and ask the same types of scientific questions (i.e. evaluate the same kinds of statistical hypotheses) without relying on these known results.
+**Please see homework PDF for the rest of the questions**
+
+### (a)
+```{r}
+set.seed(2)
+feature1 <- runif(50)
+feature2 <- runif(50)
+error <- rnorm(50,0,0.25)
+
+q4a <- data.frame(feature1,feature2,error)
+q4a$response <- feature1+feature2+error
+```
+
+### (b)
+```{r}
+set.seed(3)
+feature1b <- runif(30)
+feature2b <- runif(30)
+error.b <- rnorm(30,0,0.25)
+
+q4b <- data.frame(feature1b, feature2b, error.b)
+q4b$response <- feature1b+feature2b+error.b
+colnames(q4b) <- c("feature1", "feature2", "error", "response")
+
+my.model <- lm(response~feature1+feature2, data = q4a)
+pred <- predict(my.model, q4b[,1:2])
+
+mse0 <- mean((q4b$response - pred)^2)
+paste("MSE0:",mse0)
+```
+
+### (c)
+```{r}
+#H0: B1 = B2 = 0; Ha: At least one B1/B2 not 0
+#MSE0: 0.0782
+set.seed(42)
+pe.times <- 1000
+pe.mse <- vector(mode = "numeric", pe.times)
+for(i in 1:pe.times){
+  perm.df <- q4a[sample(c(1:nrow(q4a)),nrow(q4a),replace=T),]
+  temp.model <- lm(response~feature1+feature2, data = perm.df)
+  pred.test <- predict(temp.model, q4b[,1:2])
+  pe.mse[i] <- mean((q4b$response - pred.test)^2)
+}
+
+hist(pe.mse)
+quant <- quantile(pe.mse,0.05)
+abline(v=mse0, col = "red")
+abline(v=quant, col = "blue")
+
+p.val.idk <- sum(pe.mse < mse0) / 1000
+paste(p.val.idk)
+```
+
+Our MSE0 is above the alpha = 0.05 quantile and has a p-value above alpha. Therefore, we fail to reject the null hypothesis that none of the predictors are significant.
+
+### (d)
+```{r}
+#H0: B2 = 0; Ha: B2 not 0
+#Err0: 0.0782
+set.seed(5)
+perm.count2 <- 1000
+mse.vals <- vector(mode="numeric",length = perm.count2)
+for(i in 1:perm.count2){
+   temp.sample <- sample(q4a$feature2, nrow(q4a),replace=T)
+   temp.df <- data.frame(q4a$feature1,temp.sample, q4a$response)
+   colnames(temp.df) <- c("feature1", "feature2","response")
+   temp.model <- lm(response~feature1+feature2, data=temp.df)
+   temp.pred <- predict(temp.model, q4b[,1:2])
+   mse.vals[i] <- mean((q4b$response - temp.pred)^2)
+}
+
+hist(mse.vals)
+pq = quantile(mse.vals,0.05)
+abline(v = mse0, col="red")
+abline(v = pq, col = "blue")
+
+p.val2 <- sum(mse.vals < mse0) / perm.count2
+paste(p.val2)
+```
+
+Our MSE0 lies above the alpha = 0.05 quantile, so the original model isn't doing significantly better with the true X2 values, so X2 isn't important. P-value is also > than the alpha. Therefore, we fail to reject that Beta2 = 0.
+
+### (e)
+```{r}
+set.seed(6)
+training.df <- matrix(0, 500,10)
+testing.df <- matrix(0,50,10)
+
+fillDf <- function(df, count, features = 10){
+  for(i in 1:features){
+    temp <- runif(count)
+    df[,i] <- temp
+  }
+  e.error <- rnorm(count, 0, 0.25)
+  df <- data.frame(df,e.error)
+  response <- apply(df,1,sum)
+  df <- data.frame(df, response)
+}
+
+training.df <- fillDf(training.df,500)
+testing.df <- fillDf(testing.df, 50)
+```
+
+
+### (f)
+```{r}
+#H0: B8 = B9 = B10 = 0; Ha: At least one B8,B9,B10 not 0
+#Err0: 0.066
+set.seed(8)
+
+#Calculate Error 0
+train.no.error <- training.df[,-11]
+f.model <- lm(response~.,data=train.no.error)
+pred.test <- predict(f.model, testing.df[,1:10])
+err0 <- mean((testing.df$response - pred.test)^2)
+
+perm.count3 <- 1000
+mse.vals2 <- vector(mode="numeric",length = perm.count3)
+for(i in 1:perm.count3){
+   dtp <- training.df[,8:11]
+   ptd <- dtp[sample(c(1:nrow(dtp)),nrow(dtp),replace=T),]
+   temp.ptd <- data.frame(training.df[,1:7],ptd)
+   temp.ptd$response <- apply(temp.ptd,1,sum)
+   temp.df <- temp.ptd[,-11]
+   temp.model <- lm(response~., data=temp.df)
+   temp.pred <- predict(temp.model, testing.df[,-11])
+   mse.vals2[i] <- mean((testing.df$response - temp.pred)^2)
+}
+
+hist(mse.vals2)
+pq2 = quantile(mse.vals2,0.05)
+abline(v = err0, col="red")
+abline(v = pq2, col = "blue")
+
+p.val3 <- sum(mse.vals2 < err0) / perm.count3
+paste(p.val3)
+```
+
+Err0 lies above the alpha = 0.05 quantile of permuted errors and has a p-value above alpha, so we fail to reject H0 and concluded that the original model isn't doing significantly better with X8, X9, and X10.
+
+
+## 5. (10 pts)
+In November of 2020, Pfizer concluded its phase 3 study of its covid-19 vaccine candidate. In total, approximately 43,000 individuals were enrolled in the trial with roughly 50% receiving the vaccine and 50% receiving a placebo. By mid-November, 170 of the enrolled individuals had confirmed covid cases – 162 of those individuals had received the placebo and only 8 had received the vaccine.
+**Please see homework PDF for the rest of the questions**
+
+### (a)
+We want to test for vaccine efficacy (ve = vaccine efficacy). The null is that the vaccine efficacy is equal to the covid percentage of the placebo group. The alternative is that the ve is significantly greater than just natural immunity in the placebo group and therefore has potential to work. **H0: ve = e.body ; Ha: ve > e.body**. 
+
+```{r}
+#test stat is the test statistic for comparing proportions
+
+test.stat <- abs(((8/21500)-(162/21500))/sqrt((162/21500)*(1-(162/21500))/21500))
+paste(round(test.stat,3))
+#Critical Values
+qnorm(0.95)
+#p-value
+1-pnorm(test.stat)
+```
+
+We reject that null hypothesis that the vaccine efficacy is equal to natural immunity. Our p-value was less than alpha = 0.5 and our test statistic was greater than our critical value.
+
+### (b)
+
+We'd expect to see a near equal percentage of study participants in each group that end up getting Covid. 
+
+### (c)
+
+A reasonable test statistic is the statistic comparing the proportions of study participants that got covid in each study group. https://online.stat.psu.edu/statprogram/reviews/statistical-concepts/proportions
+
+### (d)
+```{r}
+set.seed(100)
+t.initial <- test.stat
+vaccinated.covid <- sample.int(21500,8)
+placebo.covid <- sample.int(21500,162)
+vaccinated <- matrix(0,1,21500)
+vaccinated[vaccinated.covid] <- 1
+placebo <- matrix(0,1,21500)
+placebo[placebo.covid] <- 1
+
+random.times <- 1000
+group <- cbind(vaccinated,placebo)
+extreme <- 0
+stat <- vector(mode = "numeric", random.times)
+for(i in 1:random.times){
+  temp.vac <- sample(group, 43000,replace=F)
+  p.v <- sum(temp.vac[1:21500]) / 21500
+  p.p <- sum(temp.vac[21501:43000]) / 21500
+  
+  temp.t <- abs((p.v-p.p)/sqrt(p.p*(1-p.p)/21500))
+  if(temp.t > t.initial){
+    extreme <- extreme + 1
+  }
+  stat[i] <- temp.t
+}
+
+hist(stat,main="t-statistic")
+abline(v=t.initial,col = "red")
+
+paste("P-value:", round(extreme/1000,3))
+```
+
+The p-value is 0. We can reject the null hypothesis and conclude that the vaccine efficacy is significantly greater than natural immunity. One tailed z-test was conducted since we are looking for *ve > e.body*. Our initial statistic is much higher than the randomized test statistics, so it's marking might not show up.
+

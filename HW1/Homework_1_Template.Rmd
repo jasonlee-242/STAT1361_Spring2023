@@ -1,0 +1,265 @@
+---
+title: "STAT1361 Homework 1"
+author: "Jason Lee"
+date: "2023-01-27"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, include=FALSE, message = FALSE}
+#-------------------------
+#install.packages("ISLR2")
+#-------------------------
+library(ISLR2)
+```
+
+## 1.
+* You do not need to turn anything in for this.
+
+## 2.
+
+### ISLR Chapter 2 Conceptual Exercise 1 (5 pts)
+
+### (a) 
+
+We would expect a flexible model to perform **better** because with more data points, the flexible model will be able to better identify noise/error in the data and create a better fit.
+
+### (b)
+
+We would expect a flexible model to perform **worse** because with few data points, a flexible model will quickly start to over fit on the data and any noise in the data set.
+
+### (c)
+
+We would expect a flexible model to perform **better** because with more flexibility it can better capture the non-linear portions of the data due to having more freedom.
+
+### (d)
+
+We would expect a flexible model to perform **worse** because it would quickly over fit on the data as it defines it's model based on the high variance in the data.
+
+
+### ISLR Chapter 2 Conceptual Exercise 2 (5 pts)
+
+### (a)
+
+--n = 500, p = 3 predictors--
+This is a regression problem focused on inference because we are seeking a continuous, numerical response variable (CEO salary) with emphasis on understanding the relationships between the response and predictor variables to determine how the predicors affect the response.
+
+### (b)
+
+--n = 20, p = 14 predictors--
+This is a classification problem focused on prediction because we are seeking to assign a label as the response (success/failure) with the desire to accurately do so without care for the relationships between the predictors and response.
+
+### (c)
+
+--n = 52, p = 3 predictors--
+This is a regression problem focused on prediction because we are seeking a continuous, numerical response (a % change) with the desire to predict the response as accurately as possible irrespective of the relationships between the predictors and response.
+
+
+### ISLR Chapter 2 Conceptual Exercise 5 (5 pts)
+
+Flexible methods work better for data with non-linear attributes while inflexible methods work better with linear data. Flexible methods tend to be associated with less bias, but can increase variance as over fitting takes place. The more data points there are, the less easily a flexible method will over fit. Inflexible methods have much higher bias in comparison to variance due to not necessarily trying to capture the noise in a data set. Flexible models are also much harder to interpret compared to inflexible ones. Because of this, flexible methods are better for prediction as we care more about the accuracy of our predictions rather than how the prediction comes about. In comparison, inflexible models are better for inference as it is much easier to interpret. 
+
+## 3. (5 pts)
+
+In 2a and 2c, we would need to change the response from a continuous, numerical one to one that seeks to fit the response into categories. The opposite is true for 2b. For **2a**, we could turn it into a classification problem by either switching the response variable to "Industry" (which has distinct,finite possibilities), or changing the response variable to "Low Earning", "Medium Earning", and "High Earning" CEO based on salary ranges (i.e. "Low Earning" -> 100k-1M, etc). For **2b**, we could turn the problem into a regression problem by instead predicting the number of the new product expected to sell given the predictor variables. For **2c**, we could turn the problem into a classification problem by predicting whether the % change in USD/Euro exchange rate would be "Negative", "Poor", "Medium", or "High", for example, in which each category encompasses a certain range (i.e. "Negative" -> < 0, "Poor" -> 0-20%, etc). 
+
+## 4.
+
+### ISLR Chapter 2 Applied Exercise 8 (10 pts)
+### (a)
+
+```{r message = FALSE}
+college <- read.csv("College.csv", header = T, stringsAsFactors = T)
+```
+
+### (b)
+
+```{r}
+rownames(college) <- college[,1]
+college <- college[,-1]
+head(college,3)
+```
+
+### (c)
+
+Part I
+```{r}
+summary(college)
+```
+
+Part II
+```{r}
+pairs(college[,1:10])
+```
+
+Part III
+```{r}
+plot(college$Private, college$Outstate, xlab="Private Status", ylab="Outstate Tuition ($)",
+     main = "College Private Status vs Out-of-State Tuition")
+```
+
+Part IV
+```{r}
+Elite <- rep("No", nrow(college))
+Elite[college$Top10perc>50] <- "Yes"
+Elite <- as.factor(Elite)
+college$Elite <- Elite
+
+summary(Elite)
+```
+
+There are 78 Elite Universities.
+
+```{r}
+plot(college$Elite, college$Outstate, xlab="Elite Status", ylab="Outstate Tuition ($)",
+     main="College Elite Status vs Out-of-State Tuition")
+```
+
+Part V
+```{r}
+par(mfrow = c(2,2))
+hist(college$Accept, breaks = 14)
+hist(college$Grad.Rate, breaks = 100)
+hist(college$perc.alumni, breaks = 25)
+hist(college$Outstate, breaks = 80)
+```
+
+Part VI
+
+The acceptance rate among all colleges is highly right skewed with a large majority of schools accepting less than 2500 students. The graduation rate among all colleges is a tiny bit left skewed with a large majority of colleges having a ~70% graduation rate. Finally, among all colleges, the percentage of alumni that donate and the out of state tuition are both right skewed, suggesting that not that many alumni donate and the out of state tuition is frequently ~10k.
+
+
+### ISLR Chapter 2 Applied Exercise 9 (10 pts)
+
+Load the Auto data + check for NAs
+```{r}
+auto.df <- read.csv("Auto.csv", header = T, na.string="?")
+auto.df <- na.omit(auto.df)
+```
+
+### (a)
+
+Quant: mpg, cylinders, displacement, horsepower, weight, acceleration, year
+Qual: origin (acting as factors despite being integer), name
+
+### (b)
+```{r}
+for(i in 1:7){
+  temp.range <- range(auto.df[,i])
+  cat("Range of", colnames(auto.df)[i], ":", temp.range, "<=>", diff(temp.range), "\n")
+}
+```
+
+### (c)
+```{r}
+for(i in 1:7){
+  cat(colnames(auto.df)[i], "mean/sDev:", mean(auto.df[,i]),"/",sd(auto.df[,i]),"\n")
+}
+```
+
+
+### (d)
+
+```{r}
+subset.autoDF <- auto.df[-c(10:85),]
+summary(subset.autoDF)
+```
+```{r}
+for(i in 1:7){
+  temp.range <- range(subset.autoDF[,i])
+  cat(i,")\n")
+  cat(colnames(subset.autoDF)[i], "range:", temp.range, "<=>", diff(temp.range), "\n")
+  cat(colnames(subset.autoDF)[i], "mean/sDev:", mean(subset.autoDF[,i]),"/",sd(subset.autoDF[,i]),"\n")
+}
+```
+
+
+### (e)
+```{r}
+pairs(auto.df[,1:7])
+```
+```{r}
+attach(auto.df)
+plot(as.factor(origin), mpg, xlab="Origin", ylab = "mpg")
+```
+
+### (f)
+
+Our side-by-side box plots suggest that origin is *NOT* a good predictor for mpg as there is no significant difference in mpg regardless of origin. However, our pairs plot shows that there is a strong negative correlation between mpg and displacement/horsepower/weight. Mpg also has a positive correlation with acceleration and year. Therefore, I believe displacement, horsepower, and weight would be highly useful in predicting mpg. Acceleration and year are not great, but would be ok predictor variables.
+
+### ISLR Chapter 2 Applied Exercise 10 (10 pts)
+
+### (a)
+
+The Boston data set contains 506 rows and 13 columns. Each row represents one of 506 Boston suburbs represented in the data set while each column is a predictor variable. 
+
+### (b)
+```{r}
+pairs(Boston, pch=20)
+```
+
+Crime per capita seems to have a negative relationship with medv, dis, and rm. It also seems to have a positive relationship with lstat. Lstat and medv have a noticable negative relationship. Chas is split into two "lines" when compared against all other predictors. All the other pairings are inconclusive or seem minorly related.
+
+### (c)
+
+Crime per capita seems to have a negative relationship with medv, dis, and rm. It also seems to have a positive relationship with lstat. It doesn't seem to have any other strong relationships to other predictors.
+
+### (d)
+```{r}
+cols <- c("crim", "tax", "ptratio")
+summary(Boston[cols])
+apply(Boston[cols], 2, max) - apply(Boston[cols],2,min)
+```
+```{r}
+par(mfrow = c(3,1))
+hist(Boston$crim, breaks = 25)
+hist(Boston$tax, breaks = 25)
+hist(Boston$ptratio, breaks = 25)
+```
+
+There seems to be some Boston suburbs with really high crime rates due to intense left skew of the crime histogram. With a min below 1/100 and a max ~90, we can see that there is huge range of crime rates. There are some suburbs with higher tax and pupil-teacher ratios, but nothing particularly high. This is reflected in the tax and ptratio ranges (187-711 and 12.6-22) as neither is super extreme. 
+
+### (e)
+```{r}
+num.Bounds <- sum(Boston$chas == 1)
+paste(num.Bounds, "Boston suburbs bound the Charles River.")
+```
+
+### (f)
+```{r}
+med.rat <- median(Boston$ptratio)
+paste("The median pupil-teacher ratio is:",med.rat)
+```
+
+### (g)
+```{r}
+which(Boston$medv == min(Boston$medv))
+```
+
+Suburbs 399 and 406 have the lowest median value of owner occupied homes. 
+
+```{r}
+compare <- rbind(Boston[c(399,406),], apply(Boston, 2, min))
+row.names(compare) <- c("399", "406", "minVal")
+compare
+```
+
+Suburbs 399 and 406 have the lowest values for the predictors zn, chas, and medv. They have a greater value for every other predictor.
+
+### (h)
+```{r}
+seven.rooms <- sum(Boston$rm > 7)
+eight.rooms <- sum(Boston$rm > 8)
+paste(seven.rooms, "average more than 7 rooms per dwelling.", eight.rooms, "average more than 8 rooms per dwelling.")
+```
+```{r}
+more.eight <- which(Boston$rm > 8)
+Boston[more.eight,]
+```
+
+The suburbs with more than 8 rooms per dwelling tend to have low crime, high medv, more high status residents, and around a 17 to 1 student to teacher ratio.
